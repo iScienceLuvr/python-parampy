@@ -1,13 +1,19 @@
-import types,inspect
-from definitions import SIDispenser
-from quantities import Quantity,SIQuantity
-from units import Units,Unit
+from __future__ import unicode_literals
+
+import types
+import inspect
+import re
 import numpy as np
 import sympy
-import physical_constants
-from text import colour_text
-import re
-import errors
+
+from . import text_type
+
+from .definitions import SIDispenser
+from .quantities import Quantity,SIQuantity
+from .units import Units,Unit
+from . import physical_constants
+from .text import colour_text
+from . import errors
 
 class Parameters(object):
 	"""
@@ -232,7 +238,7 @@ class Parameters(object):
 	
 	def __get_unit(self,unit):
 		
-		if isinstance(unit,str):
+		if isinstance(unit,text_type):
 			return self.__units(unit)
 		
 		elif isinstance(unit,Units):
@@ -271,7 +277,7 @@ class Parameters(object):
 		'''
 		
 		# If the parameter is actually a function
-		if not isinstance(arg,str) or (self.__get_pam_name(arg) not in kwargs and self.__get_pam_name(arg) not in self.__parameters):
+		if not isinstance(arg,text_type) or (self.__get_pam_name(arg) not in kwargs and self.__get_pam_name(arg) not in self.__parameters):
 			return self.__eval(arg,**kwargs)
 			
 		else:
@@ -293,7 +299,7 @@ class Parameters(object):
 				return self.__get_quantity(self.__parameters[arg],param=arg,scaled=scaled)
 	
 	def __get_pam_name(self,param):
-		if isinstance(param,str):
+		if isinstance(param,text_type):
 			if param[:1] == "_":
 				return param[1:]
 			return param
@@ -317,7 +323,7 @@ class Parameters(object):
 		# first evaluate them.
 		for pam,val in list(kwargs.items()):
 			if pam in restrict:
-				if isinstance(val,str):
+				if isinstance(val,text_type):
 					val = self.__get_function(val)
 				if isinstance(val,types.FunctionType):
 					new = kwargs.copy()
@@ -336,10 +342,10 @@ class Parameters(object):
 							if key in kwargs and vals[key] != kwargs[key] or key in new and vals[key] != new[key]:
 								raise errors.ParameterOverSpecifiedError("Parameter %s is overspecified, with contradictory values." % key)
 						new.update(vals)
-					except errors.ParameterNotInvertableError, e:
+					except errors.ParameterNotInvertableError as e:
 						if abort_noninvertable:
 							raise e
-						print colour_text("WARNING: Parameters are probably inconsistent as %s was overridden, but is not invertable, and so the underlying variables (%s) have not been updated." % (pam, ','.join(inspect.getargspec(self.__parameters.get(pam)).args)) , "YELLOW", True)
+						print( colour_text("WARNING: Parameters are probably inconsistent as %s was overridden, but is not invertable, and so the underlying variables (%s) have not been updated." % (pam, ','.join(inspect.getargspec(self.__parameters.get(pam)).args)) , "YELLOW", True) )
 		
 		kwargs.update(new)
 		self.__process_override(kwargs,restrict=new.keys())
@@ -430,10 +436,11 @@ class Parameters(object):
 			params = self.__get_params(*inspect.getargspec(arg)[0],**kwargs)
 			if not isinstance(params,dict):
 				params = {self.__get_pam_name(inspect.getargspec(arg)[0][0]): params}
-			return arg(* (val for val in map(lambda x: params[self.__get_pam_name(x)],inspect.getargspec(arg)[0]) ) )
-		elif isinstance(arg,str) or arg.__class__.__module__.startswith('sympy'):
+			#return arg(* (val for val in map(lambda x: params[self.__get_pam_name(x)],inspect.getargspec(arg)[0]) ) )
+			return arg(* (val for val in [params[self.__get_pam_name(x)] for x in inspect.getargspec(arg)[0]] ) )
+		elif isinstance(arg,text_type) or arg.__class__.__module__.startswith('sympy'):
 			try:
-				if isinstance(arg,str):
+				if isinstance(arg,text_type):
 					arg = sympy.S(arg)
 					fs = list(arg.free_symbols)
 					if len(fs) == 1 and str(arg)==str(fs[0]):
@@ -445,12 +452,12 @@ class Parameters(object):
 						raise errors.SymbolicEvaluationError("Symbolic expressions can only be evaluated when using scaled parameters. Attempted to use '%s' in '%s', which would yield a united quantity." % (sym,arg))
 					params[str(sym)] = self.__get_param(str(sym),**kwargs)
 				return arg.subs(params).evalf()
-			except errors.ParameterInvalidError, e:
+			except errors.ParameterInvalidError as e:
 				raise e
-			except Exception, e:
+			except Exception as e:
 				raise errors.SymbolicEvaluationError("Error evaluating symbolic statement '%s'. The message from SymPy was: `%s`." % (arg,e))
 		
-		raise KeyError, "There is no parameter, and no interpretation, of '%s' which is recognised by Parameters." % arg
+		raise errors.ParameterInvalidError("There is no parameter, and no interpretation, of '%s' which is recognised by Parameters." % arg)
 	
 	################ SET PARAMETERS ############################################
 	
@@ -471,10 +478,10 @@ class Parameters(object):
 		
 		for param,val in kwargs.items():
 			#try:
-				if isinstance(val,(types.FunctionType,str)):
+				if isinstance(val,(types.FunctionType) or isinstance(val,text_type)):
 					self.__parameters[param] = self.__check_function(param,self.__get_function(val))
 					self.__spec(**{param:self.__get_unit('')})
-				elif isinstance(val,(list,tuple)) and isinstance(val[0],(types.FunctionType,str)):
+				elif isinstance(val,(list,tuple)) and (isinstance(val[0],types.FunctionType) or isinstance(val[0],text_type) ):
 					self.__parameters[param] = self.__check_function(param,self.__get_function(val[0]))
 					self.__spec(**{param:self.__get_unit(val[1])})
 				else:
@@ -482,7 +489,7 @@ class Parameters(object):
 					if isinstance(self.__parameters[param],Quantity):
 						self.__spec(**{param:self.__parameters[param].units})
 			
-			#except Exception, e:
+			#except Exception as e:
 			#	raise errors.ParametersException("Could not add parameter %s. %s" % (param, e))
 	
 	def __update(self,**kwargs):
@@ -514,7 +521,7 @@ class Parameters(object):
 			del self.__parameters_spec[param]
 	
 	def __sub__(self,other):
-		if not isinstance(other,str):
+		if not isinstance(other,text_type):
 			raise errors.ParameterInvalidError("The subtraction operator is used to remove parameters; and a parameter name string must be provided.")
 		
 		self.__remove(other)
@@ -692,7 +699,7 @@ class Parameters(object):
 		if param is None or isinstance(param,types.FunctionType) or self.__is_valid_param(param):
 			return param
 		
-		elif isinstance(param,str):
+		elif isinstance(param,text_type):
 			return self.__sympy_to_function(param)
 		
 		raise errors.ExpressionOptimisationError("No way to optimise parameter expression: %s ." % param)
@@ -721,7 +728,7 @@ class Parameters(object):
 	
 	def __rshift__(self,other):
 		
-		if not isinstance(other, str):
+		if not isinstance(other, text_type):
 			raise errors.ParametersException("The right shift operator is used to save the parameters to a file. The operand must be a filename.")
 		
 		self.__save__(other)

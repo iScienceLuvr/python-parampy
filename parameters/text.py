@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import unicode_literals
+
 import sys
 COLOURS = (
     'BLACK', 'RED', 'GREEN', 'YELLOW',
@@ -16,8 +18,8 @@ def colour_text(text, colour_name='WHITE', bold=False):
 if __name__ == '__main__':
     for bold in (False, True):
         for colour_name in COLOURS:
-            print colour_text('Example of {0}'.format(colour_name), colour_name, bold)
-    print
+            print( colour_text('Example of {0}'.format(colour_name), colour_name, bold) )
+    print()
     # test error handling
     colour_text('TEST', 'SILVER')
 

@@ -1,7 +1,10 @@
-from units import UnitsDispenser,Units
-from definitions import SIDispenser
+from __future__ import unicode_literals
+
 import math
-import errors
+
+from .units import UnitsDispenser,Units
+from .definitions import SIDispenser
+from . import errors
 
 class Quantity(object):
 	'''
@@ -85,7 +88,7 @@ class Quantity(object):
 		return self.new(self.value/ units.scale(self.units),units, dispenser)
 	
 	def __repr__(self):
-		return str(self.value) + " " + str(self.units)
+		return str(self.value) + " " + str(self.units) # TODO: Might break in python2
 
 	def __add__(self,other):
 		scale = other.units.scale(self.units)

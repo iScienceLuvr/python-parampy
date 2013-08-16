@@ -1,6 +1,8 @@
 # coding=utf-8
 
-from units import UnitsDispenser,Unit
+from __future__ import unicode_literals
+
+from .units import UnitsDispenser,Unit
 
 class SIDispenser(UnitsDispenser):
 	
@@ -41,7 +43,7 @@ class SIDispenser(UnitsDispenser):
 		
 		# Scales
 		self \
-			+  Unit("angstrom",u"Å",1e-10).set_dimensions(length=1) \
+			+  Unit("angstrom","Å",1e-10).set_dimensions(length=1) \
 			+  Unit("astronomical unit","au",149597870691.0).set_dimensions(length=1) \
 			+  Unit("lightyear","ly",9460730472580800.).set_dimensions(length=1)
 
@@ -86,7 +88,7 @@ class SIDispenser(UnitsDispenser):
 			+  Unit("farad","F",1.0).set_dimensions(time=4,current=2,length=-2,mass=-1) \
 			+  Unit("henry","H",1).set_dimensions(mass=1,length=2,time=-2,current=-2) \
 			+  Unit("volt","V",1.).set_dimensions(mass=1,length=2,current=-1,time=-3) \
-			+  Unit("ohm",u"Ω",1.).set_dimensions(mass=1,length=2,time=-3,current=-2) \
+			+  Unit("ohm","Ω",1.).set_dimensions(mass=1,length=2,time=-3,current=-2) \
 			+  Unit("siemens","mho",1.).set_dimensions(mass=-1,length=-2,time=3,current=2) \
 			+  Unit("tesla",'T',1.).set_dimensions(mass=1,current=-1,time=-2) \
 			+  Unit("gauss","G",1e-4).set_dimensions(mass=1,current=-1,time=-2)

@@ -1,7 +1,10 @@
+from __future__ import unicode_literals
 
 from fractions import Fraction
-import errors
-from text import colour_text
+
+from . import text_type
+from . import errors
+from .text import colour_text
 
 class Unit(object):
 	'''
@@ -158,7 +161,7 @@ class UnitsDispenser(object):
 		if check:
 			for dimension,basis_unit in self.basis().items():
 				if basis_unit is None:
-					print colour_text("WARNING: No basis unit specified for: %s."%dimension)
+					print( colour_text("WARNING: No basis unit specified for: %s."%dimension) )
 		
 		if unit.prefixable:
 			for prefix in self._prefixes:
@@ -177,13 +180,13 @@ class UnitsDispenser(object):
 		return self
 	
 	def list(self):
-		return self._units.keys()
+		return list(self._units.keys())
 	
 	def has(self,identifier):
-		return self._units.has_key(identifier)
+		return identifier in self._units
 	
 	def get(self,unit):
-		if isinstance(unit,str):
+		if isinstance(unit,text_type):
 			return self._units[unit]
 		elif isinstance(unit,Unit):
 			return unit
@@ -191,7 +194,7 @@ class UnitsDispenser(object):
 	
 	@property
 	def dimensions(self):
-		return self._dimensions.keys()
+		return list(self._dimensions.keys())
 	
 	def basis(self,**kwargs):
 		if not kwargs:
@@ -202,7 +205,7 @@ class UnitsDispenser(object):
 			if unit.dimensions == {key:1}:
 				self._dimensions[key] = unit
 			else:
-				print "Invalid unit (%s) for dimension (%s)" % (unit,key)
+				print( "Invalid unit (%s) for dimension (%s)" % (unit,key) )
 	
 	
 	############# UNITS GENERATION #########################################
@@ -278,7 +281,7 @@ class Units(object):
 		elif isinstance(units,dict):
 			return units
 		
-		elif isinstance(units,str):
+		elif isinstance(units,text_type):
 			
 			d = {}
 			items = units.split("/")
@@ -308,7 +311,7 @@ class Units(object):
 	def __repr__(self):
 		output = []
 		
-		items = sorted(self.__units.items())
+		items = sorted(self.__units.items(),key=lambda x: str(x[0]))
 		
 		if self.dimensions == {}:
 			return "units"
@@ -334,7 +337,7 @@ class Units(object):
 		Returns a float comparing the current units to the provided units.
 		'''
 		
-		if isinstance(scale,str):
+		if isinstance(scale,text_type):
 			scale = self.__dispenser(scale)
 		
 		dims = self.dimensions
@@ -424,6 +427,9 @@ class Units(object):
 		return newUnit
 	
 	def __eq__(self,other):
-		if str(self) == str(other):
+		if str(self) == str(other): # TODO: WILL BREAK IN PYTHON 2
 			return True
 		return False
+	
+	def __hash__(self):
+		return ('%s'%self).__hash__()

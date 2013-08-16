@@ -2,9 +2,15 @@ __author__ = 'Matthew Wardrop'
 __author_email__ = 'mister dot <surname> at gmail'
 __version__ = '0.6'
 
+import sys
+if sys.version < '3':
+	text_type = (str,unicode)
+else:
+	text_type = str
+
 import numpy as np
 
-from quantities import Quantity,SIQuantity
-from units import UnitsDispenser, Units, Unit
-from definitions import SIDispenser
-from parameters import Parameters
+from .quantities import Quantity, SIQuantity
+from .units import UnitsDispenser, Units, Unit
+from .definitions import SIDispenser
+from .parameters import Parameters

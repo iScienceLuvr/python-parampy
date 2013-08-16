@@ -1,10 +1,10 @@
-from parameters import Parameters
-from definitions import SIDispenser
-from quantities import Quantity,SIQuantity
-from units import Unit, UnitsDispenser, Units
 import timeit
 import cProfile as profile
-import errors
+
+from parameters import Parameters,errors
+from parameters.definitions import SIDispenser
+from parameters.quantities import Quantity,SIQuantity
+from parameters.units import Unit, UnitsDispenser, Units
 '''
 print "Performance Tests"
 print "-----------------"
@@ -58,9 +58,9 @@ timer()
 profile.run('testP2()',filename='pam_functional.pstats')
 
 '''
-print "\n\n"
-print "Unit Tests"
-print "-----------------"
+print("\n\n")
+print("Unit Tests")
+print("-----------------")
 ###################### UNIT TESTS ##############################################
 import unittest
 
