@@ -6,10 +6,10 @@ import numpy as np
 from parameters import Parameters,SIDispenser,Quantity,SIQuantity,Unit, UnitsDispenser, Units, errors
 
 
-print "Performance Tests"
-print "-----------------"
-print
-print " - Simple Parameter Extraction"
+print( "Performance Tests" )
+print( "-----------------" )
+print()
+print( " - Simple Parameter Extraction" )
 x = 1e23
 p=Parameters()
 p(x=x)
@@ -27,14 +27,14 @@ def timer():
 	time1 = timeit.timeit("testP()", setup="from __main__ import testP",number=10000)
 	time2 = timeit.timeit("testD()", setup="from __main__ import testD",number=10000)
 	time3 = timeit.timeit("testR()", setup="from __main__ import testR",number=10000)
-	print time1/time2, "times slower than dict at %f cf %f" % (time1,time2)
-	print time1/time3, "times slower than raw at %f cf %f" % (time1,time3)
+	print ( time1/time2, "times slower than dict at %f cf %f" % (time1,time2) )
+	print ( time1/time3, "times slower than raw at %f cf %f" % (time1,time3) )
 timer()
 
 profile.run('testP()',filename='pam_extract.pstats')
 
-print
-print " - Functional Evalution (y=x^2)"
+print()
+print (" - Functional Evalution (y=x^2)")
 p(y=lambda x: x**2)
 
 o = p.optimise('x^2')
@@ -52,16 +52,16 @@ def timer():
 	time2 = timeit.timeit("testP2()", setup="from __main__ import testP2",number=10000)
 	time3 = timeit.timeit("testD()", setup="from __main__ import testD",number=10000)
 	time4 = timeit.timeit("testR()", setup="from __main__ import testR",number=10000)
-	print "p('x^2'): %f (%f) times slower than dict (raw) at %f cf %f (%f)" % (time1/time3,time1/time4,time1,time3,time4)
-	print "p('y'): %f (%f) times slower than dict (raw) at %f cf %f (%f)" % (time2/time3,time2/time4,time2,time3,time4)
+	print( "p('x^2'): %f (%f) times slower than dict (raw) at %f cf %f (%f)" % (time1/time3,time1/time4,time1,time3,time4) )
+	print( "p('y'): %f (%f) times slower than dict (raw) at %f cf %f (%f)" % (time2/time3,time2/time4,time2,time3,time4) )
 
 timer()
 
 profile.run('testP2()',filename='pam_functional.pstats')
 
-print "\n\n"
-print "Unit Tests"
-print "-----------------"
+print( "\n\n" )
+print( "Unit Tests" )
+print( "-----------------" )
 ###################### UNIT TESTS ##############################################
 import unittest
 

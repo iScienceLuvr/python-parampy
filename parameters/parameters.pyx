@@ -613,17 +613,16 @@ class Parameters(object):
 		self.__check_valid_params(kwargs)
 		
 		for param,val in kwargs.items():
-			#try:
-				if isinstance(val,(types.FunctionType) or isinstance(val,text_type)):
-					self.__parameters[param] = self.__check_function(param,self.__get_function(val))
-					self.__spec(**{param:self.__get_unit('')})
-				elif isinstance(val,(list,tuple)) and (isinstance(val[0],types.FunctionType) or isinstance(val[0],text_type) ):
-					self.__parameters[param] = self.__check_function(param,self.__get_function(val[0]))
-					self.__spec(**{param:self.__get_unit(val[1])})
-				else:
-					self.__parameters[param] = self.__get_quantity(val,param=param)
-					if isinstance(self.__parameters[param],Quantity):
-						self.__spec(**{param:self.__parameters[param].units})
+			if isinstance(val,(types.FunctionType) or isinstance(val,text_type)):
+				self.__parameters[param] = self.__check_function(param,self.__get_function(val))
+				self.__spec(**{param:self.__get_unit('')})
+			elif isinstance(val,(list,tuple)) and (isinstance(val[0],types.FunctionType) or isinstance(val[0],text_type) ):
+				self.__parameters[param] = self.__check_function(param,self.__get_function(val[0]))
+				self.__spec(**{param:self.__get_unit(val[1])})
+			else:
+				self.__parameters[param] = self.__get_quantity(val,param=param)
+				if isinstance(self.__parameters[param],Quantity):
+					self.__spec(**{param:self.__parameters[param].units})
 			
 			if param in dir(type(self)):
 				warnings.warn(errors.ParameterNameWarning("Parameter '%s' will not be accessible using the attribute notation `p.%s`, as it conflicts with a method name of Parameters."%(param,param)))
