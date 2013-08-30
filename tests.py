@@ -94,7 +94,7 @@ class TestParameters(unittest.TestCase):
 	def setUp(self):
 		self.p = Parameters(default_scaled=False,constants=True)
 
-	def test_create(self):
+	'''def test_create(self):
 		self.p(x=1.)
 		self.assertEqual( self.p.x, SIQuantity(1.) )
 		
@@ -220,7 +220,7 @@ class TestParameters(unittest.TestCase):
 		
 		self.p(y=(2,'J'))
 		self.p.set_bounds({'y': [ (0, 1), (3,4) ]})
-		self.assertRaises(errors.ParameterOutsideBoundsError,self.p,'y')
+		self.assertRaises(errors.ParameterOutsideBoundsError,self.p,'y')'''
 	
 	def test_ranges(self):
 		self.assertEqual( self.p.range('_J_1',J_1=[0.1,0.2,0.4]), [0.1,0.2,0.4] )

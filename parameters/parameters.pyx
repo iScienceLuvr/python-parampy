@@ -553,6 +553,7 @@ class Parameters(object):
 				unit = self.__get_unit(''  if self.__parameters_spec.get(param) is None else self.__parameters_spec.get(param) )
 			if isinstance(value,list):
 				value = np.array(value)
+			
 			q = Quantity(value*self.__unit_scaling(unit), unit,dispenser=self.__units)
 		
 		if self.__parameters_bounds is not None and isinstance(q, Quantity) and param is not None and param in self.__parameters_bounds:
@@ -613,7 +614,7 @@ class Parameters(object):
 		self.__check_valid_params(kwargs)
 		
 		for param,val in kwargs.items():
-			if isinstance(val,(types.FunctionType) or isinstance(val,text_type)):
+			if isinstance(val,(types.FunctionType)) or isinstance(val,text_type):
 				self.__parameters[param] = self.__check_function(param,self.__get_function(val))
 				self.__spec(**{param:self.__get_unit('')})
 			elif isinstance(val,(list,tuple)) and (isinstance(val[0],types.FunctionType) or isinstance(val[0],text_type) ):
