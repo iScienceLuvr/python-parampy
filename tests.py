@@ -1,22 +1,23 @@
 import timeit
 import cProfile as profile
 
-from parameters import Parameters,errors
-from parameters.definitions import SIDispenser
-from parameters.quantities import Quantity,SIQuantity
-from parameters.units import Unit, UnitsDispenser, Units
-'''
+import numpy as np
+
+from parameters import Parameters,SIDispenser,Quantity,SIQuantity,Unit, UnitsDispenser, Units, errors
+
+
 print "Performance Tests"
 print "-----------------"
 print
 print " - Simple Parameter Extraction"
-x = 123123124.214214124124
+x = 1e23
 p=Parameters()
 p(x=x)
 q = {'x':x}
+#p['x'] = (0,1e24)
 
 def testP():
-	return p.x
+	return p('x')
 def testD():
 	return q['x']
 def testR():
@@ -36,8 +37,9 @@ print
 print " - Functional Evalution (y=x^2)"
 p(y=lambda x: x**2)
 
+o = p.optimise('x^2')
 def testP():
-	return p('x^2')
+	return p(o)
 def testP2():
 	return p('y')
 def testD():
@@ -57,10 +59,9 @@ timer()
 
 profile.run('testP2()',filename='pam_functional.pstats')
 
-'''
-print("\n\n")
-print("Unit Tests")
-print("-----------------")
+print "\n\n"
+print "Unit Tests"
+print "-----------------"
 ###################### UNIT TESTS ##############################################
 import unittest
 
@@ -79,42 +80,14 @@ class TestUnitsDispenser(unittest.TestCase):
 	def test_get_units(self):
 		self.assertEqual(str(self.ud('kg^2/s')),'kg^2/s')
 
-'''class TestUnits(unittest.TestCase):
-
-	def setUp(self):
-		self.qf = units.QuantityFactory()
-
-	def test_create(self):
-		for unit in units.definitions.UNITS.list():
-			v = units.Quantity(1,unit)
-			self.assertEquals(v.value,1.,'Initial value failed for \'%s\''%unit)
-			self.assertEquals(v.units, units.WorkingUnit.fromString(unit), 'Unit unsuccessfully set for \'%s\''%unit)
-	
-	def test_convert(self):
-		q1 = units.Quantity(1,'m')
-		self.assertEqual( q1('km').value, 0.001, 'm -> km')
-
-	def test_scaling(self):
-		self.qf.setDimensionScaling(length=0.5,mass=2.)
-		
-		self.assertEquals(self.qf.getScalingForUnit('m'),0.5,"Invalid scaling for length.")
-		self.assertEquals(self.qf.getScalingForUnit('J'),0.5,"Invalid scaling for energy.")
-		
-		q = self.qf.fromStored(1.,'m','km')
-		self.assertEquals(q.value,500,'Incorrect extraction of stored data. %s'%str(q))
-		
-		q = self.qf.fromStored(1.,'J','{mu}eV')
-		self.assertEquals(q.value,8.010882435e-26,'Incorrect extraction of stored data. %s'%str(q))
-'''
-
-
 class TestQuantity(unittest.TestCase):
 	
 	def setUp(self):
 		pass
 	
-	def test_create(self):
-		pass
+	def test_algebra(self):
+		self.assertEqual( (SIQuantity(1,'m')**2 + SIQuantity(1,'nm')**2 ).value, 1+1e-18 )
+		self.assertEqual( (SIQuantity(1,'m') + SIQuantity(1,'nm') ).value, 1+1e-9 )
 	
 class TestParameters(unittest.TestCase):
 
@@ -137,15 +110,23 @@ class TestParameters(unittest.TestCase):
 		
 	def test_inverse(self):
 		self.p(x=(2,'nm'),y=(2,'m'))
-		self.p << {'z':lambda x,y,z=None: x**2 + y**2 if z is None else (2,3)}
+		self.p << {'z':lambda x,y,z=None: x**2 + y**2 if z is None else [2,3]}
 		self.p(z=2)
 		self.assertEqual( self.p.x , SIQuantity( 2 ,'m'))
-	
+		
+	def test_inverse_quantity(self):
+		self.p(x=(2,'nm'),y=(2,'m'))
+		self.p << {'z':lambda x,y,_z=None: x**2 + y**2 if _z is None else [2,3]}
+		self.assertEqual(self.p.z,self.p.x**2+self.p.y**2)
+		
+		self.p(z=10)
+		self.assertEqual( self.p.x , SIQuantity( 2 ,'m'))
+		
 	def test_chaining(self):
 		self.p(x=2,k=1)
 		self.p << {
 			'y':lambda k, y=None: k+SIQuantity(1) if y is None else y,
-			'z':lambda x,y,z=None: x+y if z is None else (2,3)
+			'z':lambda x,y,z=None: x+y if z is None else [2,3]
 			}
 		self.p(z=1)
 		self.assertEqual( self.p.x, SIQuantity(2.) ) 
@@ -213,8 +194,8 @@ class TestParameters(unittest.TestCase):
 		self.assertEqual( self.p('_x',x=(1,'J')), 2.0 )
 	
 	def test_constants(self):
-		self.assertEqual(self.p._h,6.62606957e-34)
-		self.assertEqual(self.p.h,SIQuantity(6.62606957e-34,'J*s'))
+		self.assertEqual(self.p._c_h,6.62606957e-34)
+		self.assertEqual(self.p.c_h,SIQuantity(6.62606957e-34,'J*s'))
 	
 	def test_bad_name(self):
 		def bad():
@@ -225,6 +206,28 @@ class TestParameters(unittest.TestCase):
 		self.p << {'J_1': lambda t: t**2}
 		self.assertRaises(errors.ParameterNotInvertableError, self.p, J_1=1)
 		self.assertEqual(self.p('_J_1',J_1=1),1.)
+
+	def test_asvalue(self):
+		self.p(x=(1,'J'))
+		self.p * {'mass':(-1000,'kg')}
+		self.assertEquals( self.p.asvalue(x=np.array([1,2,3])).tolist(),[-1000,-2000,-3000] )
+		self.assertEquals( self.p.asvalue(x=np.array([1,2,3]),y=np.array([1,2,3]))['y'].tolist(),[1,2,3] )
+	
+	def test_bounds(self):
+		self.p(x=(1,'J'))
+		self.p['x'] = ( (1,'J'), None )
+		self.assertRaises(errors.ParametersException,self.p,x=0)
+		
+		self.p(y=(2,'J'))
+		self.p.set_bounds({'y': [ (0, 1), (3,4) ]})
+		self.assertRaises(errors.ParameterOutsideBoundsError,self.p,'y')
+	
+	def test_ranges(self):
+		self.assertEqual( self.p.range('_J_1',J_1=[0.1,0.2,0.4]), [0.1,0.2,0.4] )
+		
+		self.p(x=1)
+		self.p << {'y':'_x^2'}
+		self.assertEqual( np.round(self.p.range('_y',x=[0.1,0.2,0.3]),4).tolist(), [0.01,0.04,0.09] )
 
 if __name__ == '__main__':
     unittest.main()

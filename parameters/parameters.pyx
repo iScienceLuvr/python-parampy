@@ -1,12 +1,11 @@
 from __future__ import unicode_literals
 
-import types
-import inspect
-import re
+from . import text_type
+
+import types,inspect,warnings,imp,re
+
 import numpy as np
 import sympy
-
-from . import text_type
 
 from .definitions import SIDispenser
 from .quantities import Quantity,SIQuantity
@@ -160,13 +159,78 @@ class Parameters(object):
 		converts a scaled parameter with dimension of 'time' to a Quantity
 		with units of 'ms'.
 	
+	## Parameter Bounding
+		
+		Sometimes it is necessary to be sure that a parameter is within 
+		certain bounds. Parameter objects can ensure this for you, with
+		minimal overhead in performance. To set a bound you can use:
+		>>> p['x'] = (0,100)
+		If one of the extremum values is None, it is set to -infinity or 
+		+infinity, depending upon whether it is the upper or lower bound.
+		If a disjointed bound is necessary, you can use:
+		>>> p['x'] = [ (None,10), (15,None) ]
+		
+		If you need more power over the bounds, you can use the 
+		set_bounds method. In addition to the bounds described above, it
+		accepts three keyword arguments: error, clip and inclusive.
+			error (True) : This keyword determines whether a parameter
+				found to be outside this bound should trigger an error;
+				or if clip is True, whether a warning should be generated.
+			clip (False) : If true, the parameter will be clipped to 
+				the nearest bound edge (assumes inclusive is True).
+				If error is true, a warning will be generated.
+			inclusive (True) : Whether the upper and lower bounds are 
+				to be included in the range.
+		>>> p.set_bounds( {'x':(0,100)}, error=True, clip=True, inclusive=True )
+	
+	## Parameter Ranges
+		
+		It is often the case that one would like to iterate over various 
+		parameter ranges, or to investigate how one parameter changes
+		relative to another. The Parameters object makes this easy with
+		the 'range' method. The range method has similar syntax to the
+		parameter extraction method; but is kept separate for clarity and
+		efficiency.
+		
+		>>> p << {'y':lamdba x:x**2}
+		>>> p.range( 'y', x = [0,1,2,3] )
+		This will return: [0,1.,4.,9.].
+		
+		Arrays may be input as lists or numpy ndarrays; and returned arrays
+		are typically numpy arrays.
+		
+		The values for parameter overrides can also be provided in a more
+		abstract notation; such that the range will be generated when the 
+		function is called. Parameters accepts ranges in the following forms:
+		 - (<start>,<stop>,<count>) ; which will generate a linear array
+		   from <start> to <stop> with <count> values.
+		 - (<start>,<stop>,<count>,<sampler>) ; which is as above, but where
+		   the <sampler> is expected to generate the array. <sampler> can
+		   be a string (either 'linear','log','invlog' for linear, logarithmic,
+		   or inverse logarithmic distributions respectively); or a function
+		   which takes arguments <start>,<stop>,<count> .
+		
+		>>> p.range( 'y', x = (0,10,2) )
+		returns: [0.,100.]
+		
+		It is also possible to determine multiple parameters at once.
+		>>> p.range( 'x', 'y', x=(0,10,2) )
+		returns: {'x':[0.,10.], 'y':[0.,100.]}
+		
+		If multiple overrides are provided, they must either be constant 
+		or have the same length.
+		>>> p.range( 'x', x=(0,10,2), z=1 )
+		is OKAY
+		>>> p.range( 'x', x=(0,10,2), z=[1,2,3] )
+		is NOT okay.
+	
 	## Physical Constants
 		
 		To make life easier, Parameters instances also broadcasts the physical
 		constants defined in "physical_constants.py" when using an SIDispenser
 		if constants is set to 'True'. These constants function just as 
 		any other parameter, and can be overriden. For example:
-		>>> p.hbar
+		>>> p.c_hbar
 	
 	## Loading and Saving
 		
@@ -177,18 +241,20 @@ class Parameters(object):
 		>>> p >> "filename.py"
 	
 	"""
-	# Parameters are retrieved as:
-	# pams.<var> returns stored value or function
-	# pams.<var>(<pams>)
 	
 	def __init__(self,dispenser=None,default_scaled=True,constants=False):
 		self.__parameters_spec = {}
 		self.__parameters = {}
+		self.__parameters_bounds = None
 		self.__scalings = {}
 		self.__unit_scalings = []
 		self.__units = dispenser if dispenser is not None else SIDispenser()
 		self.__units_custom = []
 		self.__default_scaled = default_scaled
+		
+		self.__cache_deps = {}
+		self.__cache_sups = {}
+		self.__cache_scaled = {}
 		
 		self.__scaling_cache = {}
 		
@@ -256,17 +322,32 @@ class Parameters(object):
 		
 		self.__process_override(kwargs)
 		
-		return self.__get_params(*args,**kwargs)
-	
-	def __get_params(self,*args,**kwargs):
 		
 		if len(args) == 1:
-			return self.__get_param(args[0],**kwargs)
+			result = self.__get_param(args[0],**kwargs)
+			if self.__parameters_bounds is not None:
+				kwargs[args[0]] = result
+				self.__forward_check_bounds(args,kwargs)
+			return result
 		
+		
+		results = self.__get_params(*args,**kwargs)
+		kwargs.update(results)
+		self.__forward_check_bounds(args,kwargs)
+		return results
+	
+	def __forward_check_bounds(self,args,kwargs):
+		checked = []
+		for arg in args:
+			if isinstance(arg,str):
+				for pam in self.__get_pam_sups(arg):
+					if pam in self.__parameters_bounds:
+						self.__get(pam,**kwargs)
+	
+	def __get_params(self,*args,**kwargs):
 		rv = {}
 		for arg in args:
 			rv[self.__get_pam_name(arg)] = self.__get_param(arg,**kwargs)
-		
 		return rv
 		
 	
@@ -276,8 +357,10 @@ class Parameters(object):
 		as in `kwargs`.
 		'''
 		
+		pam_name = self.__get_pam_name(arg)
+		
 		# If the parameter is actually a function
-		if not isinstance(arg,text_type) or (self.__get_pam_name(arg) not in kwargs and self.__get_pam_name(arg) not in self.__parameters):
+		if not isinstance(arg,text_type) or (pam_name not in kwargs and pam_name not in self.__parameters):
 			return self.__eval(arg,**kwargs)
 			
 		else:
@@ -285,17 +368,23 @@ class Parameters(object):
 			if arg[:1] == "_": #.startswith("_"):
 				arg = arg[1:]
 				scaled=not scaled
-			
+		
 			# If the parameter is temporarily overridden, return the override value
 			if arg in kwargs:
 				return self.__get_quantity(kwargs[arg],param=arg,scaled=scaled)
-		
+	
 			# If the parameter is a function, evaluate it with local parameter values (except where overridden in kwargs)
 			elif isinstance(self.__parameters[arg],types.FunctionType):
 				return self.__get_quantity(self.__eval_function(arg,**kwargs)[arg],param=arg,scaled=scaled)
-		
+	
 			# Otherwise, return the value currently stored in the parameters
 			else:
+				if scaled:
+					try:
+						return self.__cache_scaled[arg]
+					except:
+						self.__cache_scaled[arg] = self.__get_quantity(self.__parameters[arg],param=arg,scaled=scaled)
+						return self.__cache_scaled[arg]
 				return self.__get_quantity(self.__parameters[arg],param=arg,scaled=scaled)
 	
 	def __get_pam_name(self,param):
@@ -303,8 +392,47 @@ class Parameters(object):
 			if param[:1] == "_":
 				return param[1:]
 			return param
-			#return param if not param.startswith('_') else param[1:]
 		return param
+
+	def __get_pam_scaled_name(self,param):
+		param = self.__get_pam_name(param)
+		if self.__default_scaled:
+			return param
+		return "_%s"%param
+
+	def __get_pam_united_name(self,param):
+		param = self.__get_pam_name(param)
+		if not self.__default_scaled:
+			return param
+		return "_%s"%param
+	
+	def __get_pam_deps(self,param):
+		try:
+			return self.__cache_deps[param]
+		except:
+			if param not in self.__parameters:
+				return []
+		
+			value = self.__parameters[param]
+			if isinstance(value,types.FunctionType):
+				self.__cache_deps[param] = inspect.getargspec(value).args
+			else:
+				self.__cache_deps[param] = []
+		
+			return self.__cache_deps[param]
+	
+	def __get_pam_sups(self,param):
+		try:
+			return self.__cache_sups[param]
+		except:
+			sups = []
+			for param2 in self.__parameters:
+				if param in self.__get_pam_deps(param2):
+					sups.append(param2)
+		
+			if sups or param in self.__parameters:
+				self.__cache_sups[param] = sups
+			return sups
 	
 	def __process_override(self,kwargs,restrict=None,abort_noninvertable=False):
 		'''
@@ -345,7 +473,7 @@ class Parameters(object):
 					except errors.ParameterNotInvertableError as e:
 						if abort_noninvertable:
 							raise e
-						print( colour_text("WARNING: Parameters are probably inconsistent as %s was overridden, but is not invertable, and so the underlying variables (%s) have not been updated." % (pam, ','.join(inspect.getargspec(self.__parameters.get(pam)).args)) , "YELLOW", True) )
+						warnings.warn(errors.ParameterInconsistentWarning("Parameters are probably inconsistent as %s was overridden, but is not invertable, and so the underlying variables (%s) have not been updated." % (pam, ','.join(inspect.getargspec(self.__parameters.get(pam)).args))))
 		
 		kwargs.update(new)
 		self.__process_override(kwargs,restrict=new.keys())
@@ -368,13 +496,13 @@ class Parameters(object):
 		arguments = []
 		for arg in inspect.getargspec(f)[0]:
 			
-			if arg == param and arg not in kwargs:
+			if arg in (param,"_%s"%param) and param not in kwargs:
 				continue
 			
 			arguments.append(self.__get_param(arg,**kwargs))
 		
 		r = f(*arguments)
-		if not isinstance(r,(tuple,list)):
+		if not isinstance(r,list):
 			r = [r]
 		
 		# If we are not performing the inverse operation
@@ -390,8 +518,8 @@ class Parameters(object):
 			else:
 				pam = arg
 			
-			if pam != param:
-				inverse[arg] = self.__get_quantity(r[i],param=pam)
+			if pam != param and pam != "_%s" % param:
+				inverse[self.__get_pam_name(arg)] = self.__get_quantity(r[i],param=pam)
 		
 		return inverse
 	
@@ -404,9 +532,9 @@ class Parameters(object):
 		q = None
 		
 		# If tuple of (value,unit) is presented
-		if isinstance(value,(tuple,list)):
+		if isinstance(value,tuple):
 			if len(value) != 2:
-				raise errors.QuantityCoercionError("Tuple specifications of quantities must be of form (<value>,<unit>). Was provided with %s ."%value)
+				raise errors.QuantityCoercionError("Tuple specifications of quantities must be of form (<value>,<unit>). Was provided with %s ."%str(value))
 			else:
 				q = Quantity(*value,dispenser=self.__units)
 		
@@ -423,8 +551,13 @@ class Parameters(object):
 				unit = self.__get_unit(unit)
 			else:
 				unit = self.__get_unit(''  if self.__parameters_spec.get(param) is None else self.__parameters_spec.get(param) )
+			if isinstance(value,list):
+				value = np.array(value)
 			q = Quantity(value*self.__unit_scaling(unit), unit,dispenser=self.__units)
 		
+		if self.__parameters_bounds is not None and isinstance(q, Quantity) and param is not None and param in self.__parameters_bounds:
+			q = self.__parameters_bounds[param].check(q)
+			
 		if not scaled:
 			return q
 		
@@ -451,7 +584,7 @@ class Parameters(object):
 					if isinstance(param,Quantity):
 						raise errors.SymbolicEvaluationError("Symbolic expressions can only be evaluated when using scaled parameters. Attempted to use '%s' in '%s', which would yield a united quantity." % (sym,arg))
 					params[str(sym)] = self.__get_param(str(sym),**kwargs)
-				return arg.subs(params).evalf()
+				return float(arg.subs(params).evalf())
 			except errors.ParameterInvalidError as e:
 				raise e
 			except Exception as e:
@@ -474,6 +607,9 @@ class Parameters(object):
 	
 	def __set(self,**kwargs):
 		
+		self.__cache_deps = {}
+		self.__cache_sups = {}
+		
 		self.__check_valid_params(kwargs)
 		
 		for param,val in kwargs.items():
@@ -489,8 +625,8 @@ class Parameters(object):
 					if isinstance(self.__parameters[param],Quantity):
 						self.__spec(**{param:self.__parameters[param].units})
 			
-			#except Exception as e:
-			#	raise errors.ParametersException("Could not add parameter %s. %s" % (param, e))
+			if param in dir(type(self)):
+				warnings.warn(errors.ParameterNameWarning("Parameter '%s' will not be accessible using the attribute notation `p.%s`, as it conflicts with a method name of Parameters."%(param,param)))
 	
 	def __update(self,**kwargs):
 		
@@ -633,8 +769,8 @@ class Parameters(object):
 		
 		return '\n'.join(output)
 	
-	def __repr__(self):
-		
+	@property
+	def repr(self):
 		if len(self.__parameters) == 0:
 			return 'No parameters have been specified.'
 		
@@ -668,28 +804,177 @@ class Parameters(object):
 		
 		return self.__table(parameters)
 	
+	def __repr__(self):
+		return "< Parameters with %d definitions >" % len(self.__parameters)
+		
 	def __dir__(self):
-	    res = dir(type(self)) + list(self.__dict__.keys())
-	    res.extend(self.__parameters.keys())
-	    return res
+		res = dir(type(self)) + list(self.__dict__.keys())
+		res.extend(self.__parameters.keys())
+		return res
 	
 	def __getattr__(self,name):
 		if name[:2] == "__":
 			raise AttributeError
 		return self.__get(name)
 	
+	################## PARAMETER BOUNDS ####################################
+	
+	def set_bounds(self,bounds_dict,error=True,clip=False,inclusive=True):
+		if not isinstance(bounds_dict,dict):
+			raise ValueError("Bounds must be specified as a dictionary. Provided with: '%s'." % (bounds_dict))
+		for key,bounds in bounds_dict.items():
+			if not isinstance(bounds,list):
+				bounds = [bounds]
+			bounds_new = []
+			for bound in bounds:
+				if not isinstance(bound,tuple) or len(bound) != 2:
+					raise ValueError("Bounds must be of type 2-tuple. Received '%s'."%(bound))
+				
+				lower = bound[0]
+				if lower is None:
+					lower = (-np.inf,self.units(key))
+				lower = self.__get_quantity(lower,param=key)
+				
+				upper = bound[1]
+				if upper is None:
+					upper = (np.inf,self.units(key))
+				upper = self.__get_quantity(upper,param=key)
+				bounds_new.append( (lower,upper) )
+			
+			if self.__parameters_bounds is None:
+				self.__parameters_bounds = {}
+			self.__parameters_bounds[key] = Bounds(key,self.units(key),bounds_new,error=error,clip=clip,inclusive=inclusive)
+	
+	def __getitem__(self,key):
+		try:
+			return self.__parameters_bounds[key].bounds
+		except:
+			return None
+	
+	def __setitem__(self,key,value):
+		self.set_bounds({key:value})
+		
+	################## RANGE UTILITY #######################################
+	
+	def range(self,*args,**ranges):
+		values = None
+		static = {}
+		lists = {}
+		
+		count = None
+		for param,range in ranges.items():
+			range = self.__range_interpret(param,range)
+			if isinstance(range,(list,np.ndarray)):
+				lists[param] = range
+				count = len(range) if count is None else count
+				if count != len(range):
+					raise ValueError("Not all parameters have the same range")
+			else:
+				static[param] = range
+		
+		if count is None:
+			return self.__get(*args,**ranges)
+		
+		for i in xrange(count):
+			d = {}
+			d.update(static)
+			for key in lists:
+				d[key] = lists[key][i]
+			
+			argvs = self.__get(*args,**d)
+			
+			if len(args) == 1:
+				if values is None:
+					values = []
+				values.append(argvs)
+			else:
+				if values is None:
+					values = {}
+				for arg in args:
+					if arg not in values:
+						values[arg] = []
+					values[arg].append(argvs[arg])
+		
+		return values
+	
+	def __range_interpret(self,param,pam_range):
+		if isinstance(pam_range,tuple) and len(pam_range) in [3,4]:
+			start,end,count,sampler = 0,1,1,np.linspace
+			
+			if len(pam_range) == 4: # Then assume format (start, end, count, sampler), with sampler(start,stop,count)
+				start,end,count,sampler = pam_range
+			elif len(pam_range) == 3: # Then assume format (start, end, count)
+				start,end,count = pam_range
+			else:
+				raise ValueError, "Unknown range specification format: %s." % pam_range
+			
+			if isinstance(sampler,str):
+				if sampler == 'linear':
+					sampler = np.linspace
+				elif sampler == 'log':
+					def logspace(start,end,count):
+						logged = np.logspace(1,10,count)
+						return (logged-logged[0])*(end-start)/logged[-1]+start
+					sampler = logspace
+				elif sampler == 'invlog':
+					def logspace(start,end,count):
+						logged = np.logspace(1,10,count)
+						return (logged[::-1]-logged[0])*(end-start)/logged[-1]+start
+					sampler = logspace
+				else:
+					raise ValueError, "Unknown sampler: %s" % sampler
+			
+			return sampler(
+					self.__get_quantity(start,param=param,scaled=True),
+					self.__get_quantity(end,param=param,scaled=True),
+					count
+					)
+		return pam_range
+	
 	################## CONVERT UTILITY #####################################
-	def convert(self, quantity, input=None, output=None):
+	def asvalue(self,**kwargs):
+		d = {}
+		for param, value in kwargs.items():
+			d[param] = self.convert(value,output=self.units(param),value=True)
+		if len(d) == 1:
+			return d.values()[0]
+		return d
+
+	def asscaled(self,**kwargs):
+		d = {}
+		for param, value in kwargs.items():
+			d[param] = self.convert(value)
+		if len(d) == 1:
+			return d.values()[0]
+		return d
+
+	def units(self,*params):
+		l = list(self.__parameters_spec.get(param,None) for param in params)
+		if len(params) == 1:
+			return l[0]
+		return l
+
+	def convert(self, quantity, input=None, output=None, value=False):
+
+		if isinstance(quantity,Quantity):
+			input = str(quantity.units)
+			quantity = quantity.value
+
 		if input is None and output is None:
 			return quantity
 		
-		if output is None:
+		elif output is None:
 			return quantity / self.__unit_scaling(self.__units(input))
 		
-		if input is None:
-			return self.__get_quantity(quantity, unit=output)
+		elif input is None:
+			q = self.__get_quantity(quantity, unit=output)
 		
-		return Quantity(quantity, input, dispenser=self.__units)(output)
+		else:
+			q = Quantity(quantity, input, dispenser=self.__units)(output)
+
+		if value:
+			return q.value
+		return q
 	
 	def optimise(self,param):
 		'''
@@ -703,13 +988,11 @@ class Parameters(object):
 			return self.__sympy_to_function(param)
 		
 		raise errors.ExpressionOptimisationError("No way to optimise parameter expression: %s ." % param)
-	
+
 	################## LOAD / SAVE PROFILES ################################
 	
 	@classmethod
 	def load(cls, filename, **kwargs):
-		import imp
-		
 		profile = imp.load_source('profile', filename)
 		
 		p = cls(**kwargs)
@@ -746,7 +1029,7 @@ class Parameters(object):
 		# Export unit scalings
 		f.write( "unit_scalings = {\n" )
 		for scaling in self.__unit_scalings:
-			f.write("%s,\n"%unit)
+			f.write("%s,\n"%scaling)
 		f.write( "}\n\n" )
 		
 		# Export custom units
@@ -763,3 +1046,36 @@ class Parameters(object):
 		
 		f.close()
 
+class Bounds(object):
+	
+	def __init__(self,param,units,bounds,error=True,clip=False,inclusive=True):
+		self.param = param
+		self.units = units
+		self.bounds = bounds
+		self.error = error
+		self.clip = clip
+		self.inclusive = inclusive
+	
+	def check(self,value):
+		if self.inclusive:
+			for bound in self.bounds:
+				if bound[0] <= value and bound[1] >= value:
+					return value
+		else:
+			for bound in self.bounds:
+				if bound[0] < value and bound[1] > value:
+					return value
+		
+		if self.clip:
+			if self.error:
+				warnings.warn( errors.ParameterOutsideBoundsWarning("Value %s for '%s' outside of bounds %s. Clipping to nearest allowable value." % (value, self.param, self.bounds)) )
+			blist = []
+			for bound in self.bounds:
+				blist.extend(bound)
+			dlist = map( lambda x: abs(x-value) , self.bounds)
+			return np.array(blist)[np.where(dlist==np.min(dlist))]
+		elif self.error:
+			raise errors.ParameterOutsideBoundsError("Value %s for '%s' outside of bounds %s" % (value, self.param, self.bounds))
+		
+		warnings.warn( errors.ParameterOutsideBoundsWarning("Value %s for '%s' outside of bounds %s. Using value anyway." % (value, self.param, self.bounds)) )
+		return value

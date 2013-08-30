@@ -1,11 +1,13 @@
 from __future__ import unicode_literals
-
+from . import errors
 import math
+from functools import total_ordering
+import numpy as np
 
 from .units import UnitsDispenser,Units
 from .definitions import SIDispenser
-from . import errors
 
+@total_ordering
 class Quantity(object):
 	'''
 	Quantity (value,units=None,dispenser=None)
@@ -65,6 +67,8 @@ class Quantity(object):
 	def __init__(self,value,units=None,dispenser=None):
 		if value is None:
 			raise errors.QuantityValueError("A quantity's value must not be None.")
+		if isinstance(value,(list,tuple)):
+			value = np.array(value)
 		self.value = value
 		self._dispenser = dispenser if dispenser is not None else self._fallback_dispenser()
 		if not isinstance(units,Units):
@@ -98,6 +102,9 @@ class Quantity(object):
 		scale = other.units.scale(self.units)
 		return self.new(self.value-scale*other.value,self.units)
 	
+	def __abs__(self):
+		return self.new(abs(self.value),self.units)
+	
 	def __rsub__(self,other):
 		scale = other.units.scale(self.units)
 		return self.new(-self.value+scale*other.value,self.units)
@@ -114,15 +121,20 @@ class Quantity(object):
 		return self.new(self.value**other, self.units**other)
 	
 	def __eq__(self,other):
-		try:
+		if isinstance(other,Quantity):
 			scale = self.units.scale(other.units)
 			if self.__truncate(self.value) == self.__truncate(other.value/scale):
 				return True
 			return False
-		except:
-			return False
+		return False
+	
+	def __lt__(self,other):
+		scale = self.units.scale(other.units)
+		return self.value < other.value/scale
 	
 	def __truncate(self,value):
+		if value == 0:
+			return value
 		return round(value,int(-math.floor(math.log(abs(value),10))+10))
 	
 	def __rshift__(self,str_units):
