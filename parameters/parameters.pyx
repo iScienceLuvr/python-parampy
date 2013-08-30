@@ -861,12 +861,12 @@ class Parameters(object):
 		lists = {}
 		
 		count = None
-		for param,range in ranges.items():
-			range = self.__range_interpret(param,range)
-			if isinstance(range,(list,np.ndarray)):
-				lists[param] = range
-				count = len(range) if count is None else count
-				if count != len(range):
+		for param,pam_range in ranges.items():
+			pam_range = self.__range_interpret(param,pam_range)
+			if isinstance(pam_range,(list,np.ndarray)):
+				lists[param] = pam_range
+				count = len(pam_range) if count is None else count
+				if count != len(pam_range):
 					raise ValueError("Not all parameters have the same range")
 			else:
 				static[param] = range
@@ -874,7 +874,7 @@ class Parameters(object):
 		if count is None:
 			return self.__get(*args,**ranges)
 		
-		for i in xrange(count):
+		for i in range(count):
 			d = {}
 			d.update(static)
 			for key in lists:
@@ -905,7 +905,7 @@ class Parameters(object):
 			elif len(pam_range) == 3: # Then assume format (start, end, count)
 				start,end,count = pam_range
 			else:
-				raise ValueError, "Unknown range specification format: %s." % pam_range
+				raise ValueError ("Unknown range specification format: %s." % pam_range)
 			
 			if isinstance(sampler,str):
 				if sampler == 'linear':
@@ -921,7 +921,7 @@ class Parameters(object):
 						return (logged[::-1]-logged[0])*(end-start)/logged[-1]+start
 					sampler = logspace
 				else:
-					raise ValueError, "Unknown sampler: %s" % sampler
+					raise ValueError( "Unknown sampler: %s" % sampler )
 			
 			return sampler(
 					self.__get_quantity(start,param=param,scaled=True),
@@ -936,7 +936,7 @@ class Parameters(object):
 		for param, value in kwargs.items():
 			d[param] = self.convert(value,output=self.units(param),value=True)
 		if len(d) == 1:
-			return d.values()[0]
+			return list(d.values())[0]
 		return d
 
 	def asscaled(self,**kwargs):
@@ -944,7 +944,7 @@ class Parameters(object):
 		for param, value in kwargs.items():
 			d[param] = self.convert(value)
 		if len(d) == 1:
-			return d.values()[0]
+			return list(d.values())[0]
 		return d
 
 	def units(self,*params):
@@ -1071,7 +1071,7 @@ class Bounds(object):
 			blist = []
 			for bound in self.bounds:
 				blist.extend(bound)
-			dlist = map( lambda x: abs(x-value) , self.bounds)
+			dlist = dlist = [abs(x-value) for x in self.bounds]
 			return np.array(blist)[np.where(dlist==np.min(dlist))]
 		elif self.error:
 			raise errors.ParameterOutsideBoundsError("Value %s for '%s' outside of bounds %s" % (value, self.param, self.bounds))
