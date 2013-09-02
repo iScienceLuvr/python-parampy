@@ -1,6 +1,6 @@
 __author__ = 'Matthew Wardrop'
 __author_email__ = 'mister dot <surname> at gmail'
-__version__ = '0.9'
+__version__ = '0.9.5'
 
 import sys
 if sys.version_info.major == 3:

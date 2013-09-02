@@ -14,19 +14,19 @@ x = 1e23
 p=Parameters()
 p(x=x)
 q = {'x':x}
-#p['x'] = (0,1e24)
+p['x'] = (0,1e24)
 
 def testP():
-	return p('x')
+	return p('x',x=1)
 def testD():
 	return q['x']
 def testR():
 	return x
 
 def timer():
-	time1 = timeit.timeit("testP()", setup="from __main__ import testP",number=10000)
-	time2 = timeit.timeit("testD()", setup="from __main__ import testD",number=10000)
-	time3 = timeit.timeit("testR()", setup="from __main__ import testR",number=10000)
+	time1 = timeit.timeit("testP()", setup="from __main__ import testP",number=100000)
+	time2 = timeit.timeit("testD()", setup="from __main__ import testD",number=100000)
+	time3 = timeit.timeit("testR()", setup="from __main__ import testR",number=100000)
 	print ( time1/time2, "times slower than dict at %f cf %f" % (time1,time2) )
 	print ( time1/time3, "times slower than raw at %f cf %f" % (time1,time3) )
 timer()
@@ -94,7 +94,7 @@ class TestParameters(unittest.TestCase):
 	def setUp(self):
 		self.p = Parameters(default_scaled=False,constants=True)
 
-	'''def test_create(self):
+	def test_create(self):
 		self.p(x=1.)
 		self.assertEqual( self.p.x, SIQuantity(1.) )
 		
@@ -163,7 +163,7 @@ class TestParameters(unittest.TestCase):
 		self.p & {'x':'nm','y':'nm'}
 		self.p*{'length':(1,'nm')}
 		self.p(x=2,y=2,z=lambda x,y: x**2 + y**2)
-		self.p(_update=True,z=2)
+		self.p(z=2)
 		self.assertEqual( self.p._x , 2)
 	
 	def test_functional(self):
@@ -220,7 +220,7 @@ class TestParameters(unittest.TestCase):
 		
 		self.p(y=(2,'J'))
 		self.p.set_bounds({'y': [ (0, 1), (3,4) ]})
-		self.assertRaises(errors.ParameterOutsideBoundsError,self.p,'y')'''
+		self.assertRaises(errors.ParameterOutsideBoundsError,self.p,'y')
 	
 	def test_ranges(self):
 		self.assertEqual( self.p.range('_J_1',J_1=[0.1,0.2,0.4]), [0.1,0.2,0.4] )
@@ -230,4 +230,4 @@ class TestParameters(unittest.TestCase):
 		self.assertEqual( np.round(self.p.range('_y',x=[0.1,0.2,0.3]),4).tolist(), [0.01,0.04,0.09] )
 
 if __name__ == '__main__':
-    unittest.main()
+	unittest.main()
