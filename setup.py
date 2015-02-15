@@ -36,17 +36,16 @@ else:
     ]
 
 setup(name='python-parameters',
-      version='0.9.5',
+      version='1.2.2',
       description='A parameter manager that keeps track of physical (or numerical) quantities, and the relationships between them.',
       author='Matthew Wardrop',
       author_email='mister.wardrop@gmail.com',
       url='http://www.matthewwardrop.info/',
-      #package_dir={'parameters':'.'},
       download_url='https://github.com/themadhatter/python-parameters',
-      packages=['parameters'],
+      packages=['parameters','parameters.utility'],
       cmdclass = cmdclass,
       ext_modules = ext_modules,
-      requires=['numpy','sympy','scipy'],
+      requires=['numpy','sympy(>0.7.5)','scipy'],
       license='''The MIT License (MIT)
 
 Copyright (c) 2013 Matthew Wardrop
@@ -67,5 +66,5 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.'''
-	
+
      )

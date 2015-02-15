@@ -1,10 +1,10 @@
 __author__ = 'Matthew Wardrop'
 __author_email__ = 'mister dot <surname> at gmail'
-__version__ = '0.9.5'
+__version__ = '1.2.2'
 
 import sys
 if sys.version_info.major == 3:
-	text_type = str
+	text_type = (str, )
 else:
 	text_type = (str,unicode)
 
@@ -13,6 +13,6 @@ import pyximport; pyximport.install()
 import numpy as np
 
 from .quantities import Quantity,SIQuantity
-from .units import UnitsDispenser, Units, Unit
+from .units import UnitDispenser, Units, Unit
 from .definitions import SIDispenser
 from .parameters import Parameters, Bounds
